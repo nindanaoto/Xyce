@@ -438,6 +438,70 @@ endif()
 
 ###################
 ## End Trilinos
+
+###################
+## KLS
+###################
+
+option(Xyce_KLS "Enable the KLS sparse direct linear solver" OFF)
+set(Xyce_KLS_ROOT "" CACHE PATH "Path to a KLS source tree")
+
+if(Xyce_KLS)
+  if(NOT Xyce_KLS_ROOT)
+    set(_xyce_kls_sibling "${CMAKE_CURRENT_SOURCE_DIR}/../KLS")
+    if(EXISTS "${_xyce_kls_sibling}/CMakeLists.txt" AND
+       EXISTS "${_xyce_kls_sibling}/include/kls/kls.h")
+      set(Xyce_KLS_ROOT "${_xyce_kls_sibling}" CACHE PATH
+        "Path to a KLS source tree" FORCE)
+    endif()
+  endif()
+
+  if(NOT Xyce_KLS_ROOT)
+    message(FATAL_ERROR
+      "Xyce_KLS=ON requires Xyce_KLS_ROOT to point to a KLS source tree")
+  endif()
+
+  if(NOT EXISTS "${Xyce_KLS_ROOT}/CMakeLists.txt" OR
+     NOT EXISTS "${Xyce_KLS_ROOT}/include/kls/kls.h")
+    message(FATAL_ERROR
+      "Xyce_KLS_ROOT does not look like a KLS source tree: ${Xyce_KLS_ROOT}")
+  endif()
+
+  set(KLS_BUILD_TESTS OFF CACHE BOOL "Build KLS tests" FORCE)
+  set(KLS_BUILD_BENCHMARKS OFF CACHE BOOL "Build KLS benchmark tools" FORCE)
+
+  if(NOT DEFINED KLS_ENABLE_SPRAL_SCALING)
+    set(KLS_ENABLE_SPRAL_SCALING ON CACHE BOOL
+      "Enable SPRAL matching/scaling support")
+  endif()
+  if(NOT DEFINED KLS_USE_SYSTEM_SPRAL)
+    set(KLS_USE_SYSTEM_SPRAL OFF CACHE BOOL
+      "Use a system SPRAL library instead of the bundled submodule")
+  endif()
+  if(KLS_ENABLE_SPRAL_SCALING AND NOT KLS_USE_SYSTEM_SPRAL)
+    enable_language(Fortran)
+  endif()
+
+  add_subdirectory("${Xyce_KLS_ROOT}" "${CMAKE_BINARY_DIR}/KLS" EXCLUDE_FROM_ALL)
+
+  if(NOT TARGET KLS::kls)
+    message(FATAL_ERROR "KLS source tree did not define target KLS::kls")
+  endif()
+
+  if(CMAKE_Fortran_COMPILER_LOADED AND CMAKE_Fortran_IMPLICIT_LINK_LIBRARIES)
+    add_library(XyceKLSFortranRuntime INTERFACE)
+    target_link_libraries(XyceKLSFortranRuntime
+      INTERFACE
+        ${CMAKE_Fortran_IMPLICIT_LINK_LIBRARIES})
+    if(CMAKE_Fortran_IMPLICIT_LINK_DIRECTORIES)
+      target_link_directories(XyceKLSFortranRuntime
+        INTERFACE
+          ${CMAKE_Fortran_IMPLICIT_LINK_DIRECTORIES})
+    endif()
+  endif()
+
+  message(STATUS "KLS linear solver enabled from ${Xyce_KLS_ROOT}")
+endif()
 ###################
 
 ###################################

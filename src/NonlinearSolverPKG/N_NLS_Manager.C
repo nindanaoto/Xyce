@@ -1307,6 +1307,18 @@ populateMetadata(
     parameters.insert(Util::ParamMap::value_type("IR_MIN_TOL", Util::Param("IR_MIN_TOL", "DEFAULT")));
     parameters.insert(Util::ParamMap::value_type("BELOS_SOLVER_TYPE", Util::Param("BELOS_SOLVER_TYPE", "Block GMRES")));
     parameters.insert(Util::ParamMap::value_type("KLU_REPIVOT", Util::Param("KLU_REPIVOT", 1)));
+#ifdef Xyce_KLS
+    parameters.insert(Util::ParamMap::value_type("KLS_THREADS", Util::Param("KLS_THREADS", 1)));
+    parameters.insert(Util::ParamMap::value_type("KLS_ORDERING", Util::Param("KLS_ORDERING", "AUTO")));
+    parameters.insert(Util::ParamMap::value_type("KLS_ORIENTATION", Util::Param("KLS_ORIENTATION", "AUTO")));
+    parameters.insert(Util::ParamMap::value_type("KLS_USE_BTF", Util::Param("KLS_USE_BTF", 1)));
+    parameters.insert(Util::ParamMap::value_type("KLS_SCALE", Util::Param("KLS_SCALE", -2)));
+    parameters.insert(Util::ParamMap::value_type("KLS_PIVOT_TOLERANCE", Util::Param("KLS_PIVOT_TOLERANCE", 0.001)));
+    parameters.insert(Util::ParamMap::value_type("KLS_MEMORY_GROWTH", Util::Param("KLS_MEMORY_GROWTH", 1.5)));
+    parameters.insert(Util::ParamMap::value_type("KLS_HALT_IF_SINGULAR", Util::Param("KLS_HALT_IF_SINGULAR", 1)));
+    parameters.insert(Util::ParamMap::value_type("KLS_FAST_FACTOR", Util::Param("KLS_FAST_FACTOR", 1)));
+    parameters.insert(Util::ParamMap::value_type("KLS_STATIC_PIVOTING", Util::Param("KLS_STATIC_PIVOTING", 1)));
+#endif
     parameters.insert(Util::ParamMap::value_type("OUTPUT_LS", Util::Param("OUTPUT_LS", 1)));
     parameters.insert(Util::ParamMap::value_type("OUTPUT_BASE_LS", Util::Param("OUTPUT_BASE_LS", 1)));
     parameters.insert(Util::ParamMap::value_type("OUTPUT_FAILED_LS", Util::Param("OUTPUT_FAILED_LS", 1)));

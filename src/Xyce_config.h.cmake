@@ -14,6 +14,7 @@
 #cmakedefine Xyce_STOKHOS_ENABLE
 #cmakedefine Xyce_ROL
 #cmakedefine Xyce_USE_ISORROPIA
+#cmakedefine Xyce_KLS
 
 // Trilinos TPLs
 #cmakedefine Xyce_AMD

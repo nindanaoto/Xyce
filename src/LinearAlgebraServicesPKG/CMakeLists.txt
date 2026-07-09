@@ -10,6 +10,10 @@ if ( Xyce_AMESOS2 )
   set ( AMESOS2_SRC N_LAS_Amesos2Solver.C )
 endif()
 
+if ( Xyce_KLS )
+  set ( KLS_SRC N_LAS_KLSSolver.C )
+endif()
+
 
 set ( KSPARSE_SRC N_LAS_KSparseSolver.C
                   ksparse/Epetra_CrsKundertSparse.C
@@ -28,6 +32,7 @@ set ( KSPARSE_INC ksparse/ )
 target_sources(XyceLib PRIVATE
       ${SHYLU_SRC}
       ${AMESOS2_SRC}
+      ${KLS_SRC}
       ${KSPARSE_SRC}
       N_LAS_BelosSolver.C
       N_LAS_SimpleSolver.C
@@ -75,6 +80,14 @@ target_sources(XyceLib PRIVATE
 target_include_directories(XyceLib PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/${KSPARSE_INC}> )
+
+if ( Xyce_KLS )
+  target_link_libraries(XyceLib PRIVATE $<BUILD_LOCAL_INTERFACE:KLS::kls>)
+  if ( TARGET XyceKLSFortranRuntime )
+    target_link_libraries(XyceLib
+      PRIVATE $<BUILD_LOCAL_INTERFACE:XyceKLSFortranRuntime>)
+  endif()
+endif()
 
 
 # -- build requested libraries -----------------------------------------------
