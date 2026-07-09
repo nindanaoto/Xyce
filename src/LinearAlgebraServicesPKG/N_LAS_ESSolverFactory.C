@@ -56,6 +56,9 @@
 #include <N_LAS_AmesosSolver.h>
 #include <N_LAS_AztecOOSolver.h>
 #include <N_LAS_KSparseSolver.h>
+#ifdef Xyce_KLS
+#include <N_LAS_KLSSolver.h>
+#endif
 #include <N_LAS_BelosSolver.h>
 #ifdef Xyce_SHYLU
 #include <N_LAS_ShyLUSolver.h>
@@ -159,6 +162,12 @@ ESSolverFactory::create(
   {
     return new KSparseSolver( problem, options);
   }
+#ifdef Xyce_KLS
+  else if( type == "KLS" )
+  {
+    return new KLSSolver( problem, options);
+  }
+#endif
 #ifdef Xyce_SHYLU
   else if( type == "SHYLU" )
   {
