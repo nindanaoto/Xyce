@@ -14,6 +14,10 @@ if ( Xyce_KLS )
   set ( KLS_SRC N_LAS_KLSSolver.C )
 endif()
 
+if ( Xyce_CKTSO OR Xyce_SUBTREELU )
+  set ( THIRD_PARTY_SOLVER_SRC N_LAS_ThirdPartySolver.C )
+endif()
+
 
 set ( KSPARSE_SRC N_LAS_KSparseSolver.C
                   ksparse/Epetra_CrsKundertSparse.C
@@ -33,6 +37,7 @@ target_sources(XyceLib PRIVATE
       ${SHYLU_SRC}
       ${AMESOS2_SRC}
       ${KLS_SRC}
+      ${THIRD_PARTY_SOLVER_SRC}
       ${KSPARSE_SRC}
       N_LAS_BelosSolver.C
       N_LAS_SimpleSolver.C
@@ -87,6 +92,14 @@ if ( Xyce_KLS )
     target_link_libraries(XyceLib
       PRIVATE $<BUILD_LOCAL_INTERFACE:XyceKLSFortranRuntime>)
   endif()
+endif()
+
+if ( Xyce_CKTSO )
+  target_link_libraries(XyceLib PRIVATE XyceCKTSO)
+endif()
+
+if ( Xyce_SUBTREELU )
+  target_link_libraries(XyceLib PRIVATE XyceSubtreeLU)
 endif()
 
 

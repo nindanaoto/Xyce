@@ -504,6 +504,60 @@ if(Xyce_KLS)
 endif()
 ###################
 
+###################
+## Licensed circuit solvers (local research/evaluation only)
+###################
+option(Xyce_CKTSO "Enable the CKTSO sparse direct linear solver" OFF)
+set(Xyce_CKTSO_ROOT "" CACHE PATH "Path to a CKTSO distribution")
+set(Xyce_CKTSO_LIBRARY "" CACHE FILEPATH "Path to libcktso.so")
+if(Xyce_CKTSO)
+  if(NOT Xyce_CKTSO_ROOT)
+    set(Xyce_CKTSO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../cktso" CACHE PATH
+      "Path to a CKTSO distribution" FORCE)
+  endif()
+  if(NOT EXISTS "${Xyce_CKTSO_ROOT}/include/cktso.h")
+    message(FATAL_ERROR "Xyce_CKTSO_ROOT is missing include/cktso.h: ${Xyce_CKTSO_ROOT}")
+  endif()
+  if(NOT Xyce_CKTSO_LIBRARY)
+    set(Xyce_CKTSO_LIBRARY "${Xyce_CKTSO_ROOT}/rocky8_x64_gcc850/libcktso.so"
+      CACHE FILEPATH "Path to libcktso.so" FORCE)
+  endif()
+  if(NOT EXISTS "${Xyce_CKTSO_LIBRARY}")
+    message(FATAL_ERROR "Xyce_CKTSO_LIBRARY does not exist: ${Xyce_CKTSO_LIBRARY}")
+  endif()
+  add_library(XyceCKTSO SHARED IMPORTED)
+  set_target_properties(XyceCKTSO PROPERTIES
+    IMPORTED_LOCATION "${Xyce_CKTSO_LIBRARY}"
+    INTERFACE_INCLUDE_DIRECTORIES "${Xyce_CKTSO_ROOT}/include")
+  message(STATUS "CKTSO linear solver enabled from ${Xyce_CKTSO_LIBRARY}")
+endif()
+
+option(Xyce_SUBTREELU "Enable the SubtreeLU sparse direct linear solver" OFF)
+set(Xyce_SUBTREELU_ROOT "" CACHE PATH "Path to a SubtreeLU distribution")
+set(Xyce_SUBTREELU_LIBRARY "" CACHE FILEPATH "Path to libsubtree_lu.so")
+if(Xyce_SUBTREELU)
+  if(NOT Xyce_SUBTREELU_ROOT)
+    set(Xyce_SUBTREELU_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../SubtreeLU" CACHE PATH
+      "Path to a SubtreeLU distribution" FORCE)
+  endif()
+  if(NOT EXISTS "${Xyce_SUBTREELU_ROOT}/include/subtree_lu.h")
+    message(FATAL_ERROR "Xyce_SUBTREELU_ROOT is missing include/subtree_lu.h: ${Xyce_SUBTREELU_ROOT}")
+  endif()
+  if(NOT Xyce_SUBTREELU_LIBRARY)
+    set(Xyce_SUBTREELU_LIBRARY "${Xyce_SUBTREELU_ROOT}/lib/libsubtree_lu.so"
+      CACHE FILEPATH "Path to libsubtree_lu.so" FORCE)
+  endif()
+  if(NOT EXISTS "${Xyce_SUBTREELU_LIBRARY}")
+    message(FATAL_ERROR "Xyce_SUBTREELU_LIBRARY does not exist: ${Xyce_SUBTREELU_LIBRARY}")
+  endif()
+  add_library(XyceSubtreeLU SHARED IMPORTED)
+  set_target_properties(XyceSubtreeLU PROPERTIES
+    IMPORTED_LOCATION "${Xyce_SUBTREELU_LIBRARY}"
+    INTERFACE_INCLUDE_DIRECTORIES "${Xyce_SUBTREELU_ROOT}/include")
+  message(STATUS "SubtreeLU linear solver enabled from ${Xyce_SUBTREELU_LIBRARY}")
+endif()
+###################
+
 ###################################
 ## Find a usable FFT library
 ###################################

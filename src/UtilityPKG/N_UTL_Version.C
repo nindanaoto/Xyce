@@ -265,6 +265,12 @@ std::string Version::getCapabilities()
 #ifdef Xyce_KLS
   capabilities += "KLS linear solver enabled\n";
 #endif
+#ifdef Xyce_CKTSO
+  capabilities += "CKTSO linear solver enabled (local licensed library)\n";
+#endif
+#ifdef Xyce_SUBTREELU
+  capabilities += "SubtreeLU linear solver enabled (research-use library)\n";
+#endif
 
   if (VERBOSE_TIME)
     capabilities += "Verbose output - time integrator\n";
