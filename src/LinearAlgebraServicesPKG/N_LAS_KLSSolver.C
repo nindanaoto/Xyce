@@ -174,6 +174,10 @@ bool KLSSolver::setOptions(const Util::OptionBlock & OB)
       klsOptions_.fast_factor = it->getImmutableValue<int>();
     else if (tag == "KLS_STATIC_PIVOTING")
       klsOptions_.static_pivoting = it->getImmutableValue<int>();
+    else if (tag == "KLS_EXPECTED_REFACTORIZATIONS")
+      klsOptions_.expected_refactorizations = it->getImmutableValue<int>();
+    else if (tag == "KLS_EXPECTED_SOLVES")
+      klsOptions_.expected_solves = it->getImmutableValue<int>();
   }
 
   delete options_;
