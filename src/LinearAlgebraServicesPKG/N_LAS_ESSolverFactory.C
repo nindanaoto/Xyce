@@ -59,6 +59,9 @@
 #ifdef Xyce_KLS
 #include <N_LAS_KLSSolver.h>
 #endif
+#if defined(Xyce_CKTSO) || defined(Xyce_SUBTREELU)
+#include <N_LAS_ThirdPartySolver.h>
+#endif
 #include <N_LAS_BelosSolver.h>
 #ifdef Xyce_SHYLU
 #include <N_LAS_ShyLUSolver.h>
@@ -167,6 +170,14 @@ ESSolverFactory::create(
   {
     return new KLSSolver( problem, options);
   }
+#endif
+#ifdef Xyce_CKTSO
+  else if( type == "CKTSO" )
+    return new ThirdPartySolver( ThirdPartySolver::CKTSO_BACKEND, problem, options );
+#endif
+#ifdef Xyce_SUBTREELU
+  else if( type == "SUBTREELU" )
+    return new ThirdPartySolver( ThirdPartySolver::SUBTREELU_BACKEND, problem, options );
 #endif
 #ifdef Xyce_SHYLU
   else if( type == "SHYLU" )

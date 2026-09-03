@@ -1319,6 +1319,19 @@ populateMetadata(
     parameters.insert(Util::ParamMap::value_type("KLS_FAST_FACTOR", Util::Param("KLS_FAST_FACTOR", 1)));
     parameters.insert(Util::ParamMap::value_type("KLS_STATIC_PIVOTING", Util::Param("KLS_STATIC_PIVOTING", 1)));
 #endif
+#ifdef Xyce_CKTSO
+    parameters.insert(Util::ParamMap::value_type("CKTSO_THREADS", Util::Param("CKTSO_THREADS", 1)));
+    parameters.insert(Util::ParamMap::value_type("CKTSO_PIVOT_TOLERANCE", Util::Param("CKTSO_PIVOT_TOLERANCE", 0.001)));
+    parameters.insert(Util::ParamMap::value_type("CKTSO_ORDERING", Util::Param("CKTSO_ORDERING", 0)));
+    parameters.insert(Util::ParamMap::value_type("CKTSO_SCALE", Util::Param("CKTSO_SCALE", 0)));
+    parameters.insert(Util::ParamMap::value_type("CKTSO_AUTO_THREADS", Util::Param("CKTSO_AUTO_THREADS", 0)));
+    parameters.insert(Util::ParamMap::value_type("CKTSO_FAST_FACTOR", Util::Param("CKTSO_FAST_FACTOR", 1)));
+#endif
+#ifdef Xyce_SUBTREELU
+    parameters.insert(Util::ParamMap::value_type("SUBTREELU_THREADS", Util::Param("SUBTREELU_THREADS", 1)));
+    parameters.insert(Util::ParamMap::value_type("SUBTREELU_PIVOT_TOLERANCE", Util::Param("SUBTREELU_PIVOT_TOLERANCE", 0.001)));
+    parameters.insert(Util::ParamMap::value_type("SUBTREELU_MEMORY_GROWTH", Util::Param("SUBTREELU_MEMORY_GROWTH", 1.5)));
+#endif
     parameters.insert(Util::ParamMap::value_type("OUTPUT_LS", Util::Param("OUTPUT_LS", 1)));
     parameters.insert(Util::ParamMap::value_type("OUTPUT_BASE_LS", Util::Param("OUTPUT_BASE_LS", 1)));
     parameters.insert(Util::ParamMap::value_type("OUTPUT_FAILED_LS", Util::Param("OUTPUT_FAILED_LS", 1)));

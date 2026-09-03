@@ -15,6 +15,8 @@
 #cmakedefine Xyce_ROL
 #cmakedefine Xyce_USE_ISORROPIA
 #cmakedefine Xyce_KLS
+#cmakedefine Xyce_CKTSO
+#cmakedefine Xyce_SUBTREELU
 
 // Trilinos TPLs
 #cmakedefine Xyce_AMD
