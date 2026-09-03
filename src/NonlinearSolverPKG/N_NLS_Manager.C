@@ -1318,6 +1318,8 @@ populateMetadata(
     parameters.insert(Util::ParamMap::value_type("KLS_HALT_IF_SINGULAR", Util::Param("KLS_HALT_IF_SINGULAR", 1)));
     parameters.insert(Util::ParamMap::value_type("KLS_FAST_FACTOR", Util::Param("KLS_FAST_FACTOR", 1)));
     parameters.insert(Util::ParamMap::value_type("KLS_STATIC_PIVOTING", Util::Param("KLS_STATIC_PIVOTING", 1)));
+    parameters.insert(Util::ParamMap::value_type("KLS_EXPECTED_REFACTORIZATIONS", Util::Param("KLS_EXPECTED_REFACTORIZATIONS", 0)));
+    parameters.insert(Util::ParamMap::value_type("KLS_EXPECTED_SOLVES", Util::Param("KLS_EXPECTED_SOLVES", 0)));
 #endif
 #ifdef Xyce_CKTSO
     parameters.insert(Util::ParamMap::value_type("CKTSO_THREADS", Util::Param("CKTSO_THREADS", 1)));
