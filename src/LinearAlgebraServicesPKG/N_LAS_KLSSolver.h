@@ -67,9 +67,10 @@ public:
 private:
   int analyze_(Epetra_LinearProblem * problem);
   int factor_(Epetra_LinearProblem * problem);
+  int refactorSolve_(Epetra_LinearProblem * problem);
   int solve_(Epetra_LinearProblem * problem, bool transpose);
   int buildCSR_(Epetra_CrsMatrix * matrix);
-  int updateValues_(Epetra_CrsMatrix * matrix);
+  int updateValues_(Epetra_CrsMatrix * matrix, bool * changed = 0);
   void clearAnalysis_();
 
   Epetra_LinearProblem * importToSerial_();
