@@ -22,6 +22,7 @@
 
 #include <Xyce_config.h>
 
+#include <cstring>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -118,6 +119,7 @@ KLSSolver::KLSSolver(
   problem_ = &(eprob.epetraObj());
 
   kls_default_options(&klsOptions_);
+  klsOptions_.record_tiny_solve_timing = 0;
   setOptions(options);
 }
 
@@ -143,6 +145,7 @@ KLSSolver::~KLSSolver()
 bool KLSSolver::setOptions(const Util::OptionBlock & OB)
 {
   kls_default_options(&klsOptions_);
+  klsOptions_.record_tiny_solve_timing = 0;
 
   for (Util::ParamList::const_iterator it = OB.begin(); it != OB.end(); ++it)
   {
@@ -199,6 +202,7 @@ int KLSSolver::doSolve(bool reuse_factors, bool transpose)
 
   int linearStatus = 0;
   int klsStatus = KLS_OK;
+  bool solutionReady = false;
   Epetra_LinearProblem * prob = problem_;
 
   static int failure_number = 0;
@@ -241,7 +245,17 @@ int KLSSolver::doSolve(bool reuse_factors, bool transpose)
 
     if (klsStatus == KLS_OK && (!reuse_factors || !factored_))
     {
-      klsStatus = factor_(prob);
+      if (factored_ && !transpose)
+      {
+        klsStatus = refactorSolve_(prob);
+        solutionReady = (klsStatus == KLS_OK);
+        if (klsStatus != KLS_OK)
+          klsStatus = factor_(prob);
+      }
+      else
+      {
+        klsStatus = factor_(prob);
+      }
       if (klsStatus == KLS_ERR_UNSUPPORTED && !analyzed_)
       {
         klsStatus = analyze_(prob);
@@ -250,7 +264,7 @@ int KLSSolver::doSolve(bool reuse_factors, bool transpose)
       }
     }
 
-    if (klsStatus == KLS_OK)
+    if (klsStatus == KLS_OK && !solutionReady)
       klsStatus = solve_(prob, transpose);
   }
 
@@ -401,6 +415,37 @@ int KLSSolver::factor_(Epetra_LinearProblem * problem)
 }
 
 //-----------------------------------------------------------------------------
+// Function      : KLSSolver::refactorSolve_
+// Purpose       : Refactor and solve one ordinary Xyce right-hand side.
+//-----------------------------------------------------------------------------
+int KLSSolver::refactorSolve_(Epetra_LinearProblem * problem)
+{
+  Epetra_CrsMatrix * matrix = dynamic_cast<Epetra_CrsMatrix *>(problem->GetMatrix());
+  Epetra_MultiVector * X = problem->GetLHS();
+  Epetra_MultiVector * B = problem->GetRHS();
+  if (!matrix || !solver_ || !factored_ || !X || !B ||
+      X->NumVectors() != 1 || B->NumVectors() != 1)
+    return KLS_ERR_UNSUPPORTED;
+
+  bool valuesChanged = false;
+  int status = updateValues_(matrix, &valuesChanged);
+  if (status != KLS_OK)
+    return status;
+
+  double ** rhsPtrs = 0;
+  double ** lhsPtrs = 0;
+  if (B->ExtractView(&rhsPtrs) != 0 || X->ExtractView(&lhsPtrs) != 0)
+    return KLS_ERR_INVALID_ARGUMENT;
+
+  status = valuesChanged
+    ? kls_refactor_solve(solver_, values_.empty() ? 0 : &values_[0],
+                         1, rhsPtrs[0], 0, lhsPtrs[0], 0)
+    : kls_solve(solver_, 1, rhsPtrs[0], 0, lhsPtrs[0], 0);
+  factored_ = (status == KLS_OK);
+  return status;
+}
+
+//-----------------------------------------------------------------------------
 // Function      : KLSSolver::solve_
 // Purpose       :
 // Special Notes :
@@ -495,7 +540,7 @@ int KLSSolver::buildCSR_(Epetra_CrsMatrix * matrix)
 // Special Notes :
 // Scope         : Private
 //-----------------------------------------------------------------------------
-int KLSSolver::updateValues_(Epetra_CrsMatrix * matrix)
+int KLSSolver::updateValues_(Epetra_CrsMatrix * matrix, bool * changed)
 {
   if (!matrix)
     return KLS_ERR_INVALID_ARGUMENT;
@@ -508,6 +553,7 @@ int KLSSolver::updateValues_(Epetra_CrsMatrix * matrix)
     return KLS_ERR_UNSUPPORTED;
   }
 
+  bool anyChanged = false;
   int offset = 0;
   for (int row = 0; row < n; ++row)
   {
@@ -524,9 +570,21 @@ int KLSSolver::updateValues_(Epetra_CrsMatrix * matrix)
       return KLS_ERR_UNSUPPORTED;
     }
 
-    for (int entry = 0; entry < numEntries; ++entry)
-      values_[static_cast<std::size_t>(offset++)] = rowValues[entry];
+    if (numEntries > 0)
+    {
+      double * destination = &values_[static_cast<std::size_t>(offset)];
+      const std::size_t bytes = static_cast<std::size_t>(numEntries) * sizeof(double);
+      if (std::memcmp(destination, rowValues, bytes) != 0)
+      {
+        anyChanged = true;
+        std::memcpy(destination, rowValues, bytes);
+      }
+      offset += numEntries;
+    }
   }
+
+  if (changed)
+    *changed = anyChanged;
 
   return KLS_OK;
 }
