@@ -1309,6 +1309,8 @@ populateMetadata(
     parameters.insert(Util::ParamMap::value_type("KLU_REPIVOT", Util::Param("KLU_REPIVOT", 1)));
 #ifdef Xyce_KLS
     parameters.insert(Util::ParamMap::value_type("KLS_THREADS", Util::Param("KLS_THREADS", 1)));
+    parameters.insert(Util::ParamMap::value_type("KLS_BACKEND", Util::Param("KLS_BACKEND", "AUTO")));
+    parameters.insert(Util::ParamMap::value_type("KLS_PROFILE", Util::Param("KLS_PROFILE", 0)));
     parameters.insert(Util::ParamMap::value_type("KLS_ORDERING", Util::Param("KLS_ORDERING", "AUTO")));
     parameters.insert(Util::ParamMap::value_type("KLS_ORIENTATION", Util::Param("KLS_ORIENTATION", "AUTO")));
     parameters.insert(Util::ParamMap::value_type("KLS_USE_BTF", Util::Param("KLS_USE_BTF", 1)));

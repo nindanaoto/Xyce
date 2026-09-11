@@ -82,6 +82,18 @@ private:
   kls_options klsOptions_;
   bool analyzed_;
   bool factored_;
+  bool usingOriginalProblem_;
+
+  bool profile_;
+  struct Profile
+  {
+    Profile()
+      : total(0), imports(0), exports(0), analysis(0), values(0),
+        factor(0), refactorSolve(0), solve(0), calls(0), directCalls(0) {}
+    double total, imports, exports, analysis, values;
+    double factor, refactorSolve, solve;
+    unsigned long long calls, directCalls;
+  } profileStats_;
 
   std::vector<int> rowPtr_;
   std::vector<int> colIdx_;
