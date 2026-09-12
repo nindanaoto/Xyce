@@ -154,6 +154,7 @@ KLSSolver::KLSSolver(
 
   kls_default_options(&klsOptions_);
   klsOptions_.record_tiny_solve_timing = 0;
+  refactorEnabled_ = true;
   setOptions(options);
 }
 
@@ -193,9 +194,11 @@ bool KLSSolver::setOptions(const Util::OptionBlock & OB)
 {
   kls_default_options(&klsOptions_);
   klsOptions_.record_tiny_solve_timing = 0;
+  refactorEnabled_ = true;
 
   profile_ = false;
   profileStats_ = Profile();
+  tuningProfilePath_.clear();
 
   for (Util::ParamList::const_iterator it = OB.begin(); it != OB.end(); ++it)
   {
@@ -211,8 +214,19 @@ bool KLSSolver::setOptions(const Util::OptionBlock & OB)
       klsOptions_.threads = it->getImmutableValue<int>();
     else if (tag == "KLS_BACKEND")
       klsOptions_.backend = parseBackend(*it);
+    else if (tag == "KLS_REFACTOR")
+      refactorEnabled_ = it->getImmutableValue<int>() != 0;
     else if (tag == "KLS_PROFILE")
       profile_ = it->getImmutableValue<int>() != 0;
+    else if (tag == "KLS_TUNING_PROFILE")
+    {
+      tuningProfilePath_ = it->stringValue();
+      // Netlist string values retain surrounding double quotes.
+      if (tuningProfilePath_.size() >= 2 &&
+          tuningProfilePath_[0] == '"' &&
+          tuningProfilePath_[tuningProfilePath_.size() - 1] == '"')
+        tuningProfilePath_ = tuningProfilePath_.substr(1, tuningProfilePath_.size() - 2);
+    }
     else if (tag == "KLS_ORDERING")
       klsOptions_.ordering = parseOrdering(*it, klsOptions_.ordering);
     else if (tag == "KLS_ORIENTATION")
@@ -236,6 +250,9 @@ bool KLSSolver::setOptions(const Util::OptionBlock & OB)
     else if (tag == "KLS_EXPECTED_SOLVES")
       klsOptions_.expected_solves = it->getImmutableValue<int>();
   }
+
+  klsOptions_.tuning_profile_path = tuningProfilePath_.empty()
+    ? 0 : tuningProfilePath_.c_str();
 
   if (klsOptions_.backend == KLS_BACKEND_SERIAL && klsOptions_.threads != 1)
     Report::UserError0() << "KLS_BACKEND=SERIAL requires KLS_THREADS=1";
@@ -304,7 +321,7 @@ int KLSSolver::doSolve(bool reuse_factors, bool transpose)
 
     if (klsStatus == KLS_OK && (!reuse_factors || !factored_))
     {
-      if (factored_ && !transpose)
+      if (factored_ && !transpose && refactorEnabled_)
       {
         klsStatus = refactorSolve_(prob);
         solutionReady = (klsStatus == KLS_OK);
@@ -441,6 +458,15 @@ int KLSSolver::analyze_(Epetra_LinearProblem * problem)
                                      0, &klsOptions_);
   analyzed_ = (status == KLS_OK);
   factored_ = false;
+  if (analyzed_ && !tuningProfilePath_.empty())
+  {
+    kls_stats stats = {};
+    stats.struct_size = sizeof(stats);
+    if (kls_get_stats(solver_, &stats) == KLS_OK)
+      Xyce::lout() << "KLS tuning profile active = " << stats.tuning_profile_active
+        << "\nKLS tuning profile changed fields = " << stats.tuning_profile_field_count
+        << "\nKLS tuning profile id = " << stats.tuning_profile_id << std::endl;
+  }
   return status;
 }
 
@@ -462,7 +488,7 @@ int KLSSolver::factor_(Epetra_LinearProblem * problem)
 
   ProfileTimer profileTimer(profile_ ? &profileStats_.factor : 0);
 
-  if (factored_)
+  if (factored_ && refactorEnabled_)
   {
     status = kls_refactor(solver_, values_.empty() ? 0 : &values_[0]);
     if (status != KLS_OK)

@@ -20,7 +20,7 @@
 #include <iostream>
 
 int runCase(const Epetra_Comm & comm, bool permutedColumns, int rhsCount,
-            const char * backend)
+            const char * backend, const char * tuningProfile, bool refactorEnabled)
 {
   const int n = 4;
   Epetra_Map rows(n, 0, comm);
@@ -46,6 +46,9 @@ int runCase(const Epetra_Comm & comm, bool permutedColumns, int rhsCount,
   Xyce::Util::OptionBlock options;
   options.addParam(Xyce::Util::Param("KLS_BACKEND", backend));
   options.addParam(Xyce::Util::Param("KLS_THREADS", 1));
+  options.addParam(Xyce::Util::Param("KLS_REFACTOR", int(refactorEnabled)));
+  if (tuningProfile)
+    options.addParam(Xyce::Util::Param("KLS_TUNING_PROFILE", tuningProfile));
   Xyce::Linear::KLSSolver solver(problem, options);
   for (int step = 0; step < 4; ++step)
   {
@@ -102,7 +105,9 @@ int main(int argc, char ** argv)
     for (const char * backend : {"AUTO", "SERIAL"})
       for (bool permuted : {false, true})
         for (int rhsCount : {1, 2})
-          errors += runCase(comm, permuted, rhsCount, backend);
+         for (bool refactorEnabled : {false, true})
+          errors += runCase(comm, permuted, rhsCount, backend,
+                            argc > 1 ? argv[1] : 0, refactorEnabled);
     comm.MaxAll(&errors, &result, 1);
     if (comm.MyPID() == 0)
       std::cout << (result ? "KLS adapter regression FAILED" : "KLS adapter regression passed") << std::endl;

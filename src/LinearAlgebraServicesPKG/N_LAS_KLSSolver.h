@@ -32,6 +32,7 @@
 #define Xyce_N_LAS_KLSSolver_h
 
 #include <vector>
+#include <string>
 
 #include <N_LAS_fwd.h>
 #include <N_UTL_fwd.h>
@@ -80,8 +81,10 @@ private:
 
   kls_solver * solver_;
   kls_options klsOptions_;
+  std::string tuningProfilePath_;
   bool analyzed_;
   bool factored_;
+  bool refactorEnabled_;
   bool usingOriginalProblem_;
 
   bool profile_;
