@@ -1,6 +1,17 @@
 add_executable( testBlockLinearSystems testBlockLinearSystems.C )
 target_link_libraries( testBlockLinearSystems XyceLib )
 
+if(Xyce_KLS AND BUILD_TESTING)
+     add_executable(testKLSAdapter testKLSAdapter.C)
+     target_link_libraries(testKLSAdapter XyceLib KLS::kls)
+     add_test(NAME testKLSAdapter COMMAND testKLSAdapter)
+     set_tests_properties(testKLSAdapter PROPERTIES LABELS "unittest" TIMEOUT 60)
+     if(Xyce_PARALLEL_MPI)
+          add_test(NAME testKLSAdapterMPI COMMAND mpiexec -np 4 $<TARGET_FILE:testKLSAdapter>)
+          set_tests_properties(testKLSAdapterMPI PROPERTIES LABELS "parallel;unittest" TIMEOUT 60)
+     endif()
+endif()
+
 if( BUILD_TESTING )
      add_test( testBlockLinearSystems testBlockLinearSystems )
      set_tests_properties( testBlockLinearSystems PROPERTIES

@@ -23,6 +23,7 @@
 #include <Xyce_config.h>
 
 #include <cstring>
+#include <chrono>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -49,11 +50,42 @@
 
 namespace {
 
+// No clock reads when profiling is disabled. Each accumulator is exclusive
+// except total, which measures the complete adapter call.
+class ProfileTimer
+{
+public:
+  explicit ProfileTimer(double * seconds) : seconds_(seconds)
+  {
+    if (seconds_)
+      start_ = std::chrono::steady_clock::now();
+  }
+  ~ProfileTimer()
+  {
+    if (seconds_)
+      *seconds_ += std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - start_).count();
+  }
+private:
+  double * seconds_;
+  std::chrono::steady_clock::time_point start_;
+};
+
 std::string upperValue(const Xyce::Util::Param & param)
 {
   Xyce::ExtendedString value = param.usVal();
   value.toUpper();
   return value;
+}
+
+kls_backend parseBackend(const Xyce::Util::Param & param)
+{
+  const std::string value = upperValue(param);
+  if (value == "AUTO") return KLS_BACKEND_AUTO;
+  if (value == "KLS") return KLS_BACKEND_KLS;
+  if (value == "SERIAL") return KLS_BACKEND_SERIAL;
+  Xyce::Report::UserError0() << "KLS_BACKEND must be AUTO, KLS, or SERIAL";
+  return KLS_BACKEND_AUTO;
 }
 
 kls_ordering parseOrdering(const Xyce::Util::Param & param,
@@ -109,6 +141,8 @@ KLSSolver::KLSSolver(
     solver_(0),
     analyzed_(false),
     factored_(false),
+    usingOriginalProblem_(false),
+    profile_(false),
     outputLS_(0),
     outputBaseLS_(0),
     outputFailedLS_(0),
@@ -120,6 +154,7 @@ KLSSolver::KLSSolver(
 
   kls_default_options(&klsOptions_);
   klsOptions_.record_tiny_solve_timing = 0;
+  refactorEnabled_ = true;
   setOptions(options);
 }
 
@@ -131,6 +166,19 @@ KLSSolver::KLSSolver(
 //-----------------------------------------------------------------------------
 KLSSolver::~KLSSolver()
 {
+  if (profile_ && profileStats_.calls && problem_->GetRHS()->Comm().MyPID() == 0)
+  {
+    Xyce::lout() << "KLS profile calls = " << profileStats_.calls << '\n'
+      << "KLS profile direct calls = " << profileStats_.directCalls << '\n'
+      << "KLS profile total seconds = " << profileStats_.total << '\n'
+      << "KLS profile import seconds = " << profileStats_.imports << '\n'
+      << "KLS profile export seconds = " << profileStats_.exports << '\n'
+      << "KLS profile analysis seconds = " << profileStats_.analysis << '\n'
+      << "KLS profile values seconds = " << profileStats_.values << '\n'
+      << "KLS profile factor seconds = " << profileStats_.factor << '\n'
+      << "KLS profile refactor solve seconds = " << profileStats_.refactorSolve << '\n'
+      << "KLS profile solve seconds = " << profileStats_.solve << std::endl;
+  }
   if (solver_)
     kls_destroy(solver_);
   delete options_;
@@ -146,6 +194,11 @@ bool KLSSolver::setOptions(const Util::OptionBlock & OB)
 {
   kls_default_options(&klsOptions_);
   klsOptions_.record_tiny_solve_timing = 0;
+  refactorEnabled_ = true;
+
+  profile_ = false;
+  profileStats_ = Profile();
+  tuningProfilePath_.clear();
 
   for (Util::ParamList::const_iterator it = OB.begin(); it != OB.end(); ++it)
   {
@@ -159,6 +212,21 @@ bool KLSSolver::setOptions(const Util::OptionBlock & OB)
       outputFailedLS_ = it->getImmutableValue<int>();
     else if (tag == "KLS_THREADS")
       klsOptions_.threads = it->getImmutableValue<int>();
+    else if (tag == "KLS_BACKEND")
+      klsOptions_.backend = parseBackend(*it);
+    else if (tag == "KLS_REFACTOR")
+      refactorEnabled_ = it->getImmutableValue<int>() != 0;
+    else if (tag == "KLS_PROFILE")
+      profile_ = it->getImmutableValue<int>() != 0;
+    else if (tag == "KLS_TUNING_PROFILE")
+    {
+      tuningProfilePath_ = it->stringValue();
+      // Netlist string values retain surrounding double quotes.
+      if (tuningProfilePath_.size() >= 2 &&
+          tuningProfilePath_[0] == '"' &&
+          tuningProfilePath_[tuningProfilePath_.size() - 1] == '"')
+        tuningProfilePath_ = tuningProfilePath_.substr(1, tuningProfilePath_.size() - 2);
+    }
     else if (tag == "KLS_ORDERING")
       klsOptions_.ordering = parseOrdering(*it, klsOptions_.ordering);
     else if (tag == "KLS_ORIENTATION")
@@ -183,6 +251,12 @@ bool KLSSolver::setOptions(const Util::OptionBlock & OB)
       klsOptions_.expected_solves = it->getImmutableValue<int>();
   }
 
+  klsOptions_.tuning_profile_path = tuningProfilePath_.empty()
+    ? 0 : tuningProfilePath_.c_str();
+
+  if (klsOptions_.backend == KLS_BACKEND_SERIAL && klsOptions_.threads != 1)
+    Report::UserError0() << "KLS_BACKEND=SERIAL requires KLS_THREADS=1";
+
   delete options_;
   options_ = new Util::OptionBlock(OB);
   clearAnalysis_();
@@ -198,6 +272,8 @@ bool KLSSolver::setOptions(const Util::OptionBlock & OB)
 //-----------------------------------------------------------------------------
 int KLSSolver::doSolve(bool reuse_factors, bool transpose)
 {
+  ProfileTimer profileTimer(profile_ ? &profileStats_.total : 0);
+  if (profile_) ++profileStats_.calls;
   timer_->resetStartTime();
 
   int linearStatus = 0;
@@ -245,7 +321,7 @@ int KLSSolver::doSolve(bool reuse_factors, bool transpose)
 
     if (klsStatus == KLS_OK && (!reuse_factors || !factored_))
     {
-      if (factored_ && !transpose)
+      if (factored_ && !transpose && refactorEnabled_)
       {
         klsStatus = refactorSolve_(prob);
         solutionReady = (klsStatus == KLS_OK);
@@ -269,8 +345,9 @@ int KLSSolver::doSolve(bool reuse_factors, bool transpose)
   }
 
   int localFailure = (klsStatus == KLS_OK) ? 0 : 1;
-  int globalFailure = 0;
-  matrix->Comm().MaxAll(&localFailure, &globalFailure, 1);
+  int globalFailure = localFailure;
+  if (matrix->Comm().NumProc() > 1)
+    matrix->Comm().MaxAll(&localFailure, &globalFailure, 1);
 
   if (globalFailure)
   {
@@ -359,6 +436,7 @@ int KLSSolver::doSolve(bool reuse_factors, bool transpose)
 //-----------------------------------------------------------------------------
 int KLSSolver::analyze_(Epetra_LinearProblem * problem)
 {
+  ProfileTimer profileTimer(profile_ ? &profileStats_.analysis : 0);
   Epetra_CrsMatrix * matrix = dynamic_cast<Epetra_CrsMatrix *>(problem->GetMatrix());
   if (!matrix)
     return KLS_ERR_INVALID_ARGUMENT;
@@ -380,6 +458,15 @@ int KLSSolver::analyze_(Epetra_LinearProblem * problem)
                                      0, &klsOptions_);
   analyzed_ = (status == KLS_OK);
   factored_ = false;
+  if (analyzed_ && !tuningProfilePath_.empty())
+  {
+    kls_stats stats = {};
+    stats.struct_size = sizeof(stats);
+    if (kls_get_stats(solver_, &stats) == KLS_OK)
+      Xyce::lout() << "KLS tuning profile active = " << stats.tuning_profile_active
+        << "\nKLS tuning profile changed fields = " << stats.tuning_profile_field_count
+        << "\nKLS tuning profile id = " << stats.tuning_profile_id << std::endl;
+  }
   return status;
 }
 
@@ -399,7 +486,9 @@ int KLSSolver::factor_(Epetra_LinearProblem * problem)
   if (status != KLS_OK)
     return status;
 
-  if (factored_)
+  ProfileTimer profileTimer(profile_ ? &profileStats_.factor : 0);
+
+  if (factored_ && refactorEnabled_)
   {
     status = kls_refactor(solver_, values_.empty() ? 0 : &values_[0]);
     if (status != KLS_OK)
@@ -437,6 +526,7 @@ int KLSSolver::refactorSolve_(Epetra_LinearProblem * problem)
   if (B->ExtractView(&rhsPtrs) != 0 || X->ExtractView(&lhsPtrs) != 0)
     return KLS_ERR_INVALID_ARGUMENT;
 
+  ProfileTimer profileTimer(profile_ ? &profileStats_.refactorSolve : 0);
   status = valuesChanged
     ? kls_refactor_solve(solver_, values_.empty() ? 0 : &values_[0],
                          1, rhsPtrs[0], 0, lhsPtrs[0], 0)
@@ -453,6 +543,7 @@ int KLSSolver::refactorSolve_(Epetra_LinearProblem * problem)
 //-----------------------------------------------------------------------------
 int KLSSolver::solve_(Epetra_LinearProblem * problem, bool transpose)
 {
+  ProfileTimer profileTimer(profile_ ? &profileStats_.solve : 0);
   if (!solver_ || !factored_)
     return KLS_ERR_INVALID_ARGUMENT;
 
@@ -542,6 +633,7 @@ int KLSSolver::buildCSR_(Epetra_CrsMatrix * matrix)
 //-----------------------------------------------------------------------------
 int KLSSolver::updateValues_(Epetra_CrsMatrix * matrix, bool * changed)
 {
+  ProfileTimer profileTimer(profile_ ? &profileStats_.values : 0);
   if (!matrix)
     return KLS_ERR_INVALID_ARGUMENT;
 
@@ -617,8 +709,24 @@ void KLSSolver::clearAnalysis_()
 //-----------------------------------------------------------------------------
 Epetra_LinearProblem * KLSSolver::importToSerial_()
 {
+  ProfileTimer profileTimer(profile_ ? &profileStats_.imports : 0);
+  usingOriginalProblem_ = false;
 #ifdef Xyce_PARALLEL_MPI
   Epetra_CrsMatrix * origMat = dynamic_cast<Epetra_CrsMatrix *>(problem_->GetOperator());
+
+  // Local CSR column indices must address the same ordering as matrix rows
+  // and both vectors. A single rank alone does not guarantee this.
+  if (origMat->Comm().NumProc() == 1 &&
+      origMat->RowMap().SameAs(origMat->ColMap()) &&
+      origMat->RowMap().SameAs(origMat->OperatorDomainMap()) &&
+      origMat->RowMap().SameAs(origMat->OperatorRangeMap()) &&
+      origMat->RowMap().SameAs(problem_->GetLHS()->Map()) &&
+      origMat->RowMap().SameAs(problem_->GetRHS()->Map()))
+  {
+    usingOriginalProblem_ = true;
+    if (profile_) ++profileStats_.directCalls;
+    return problem_;
+  }
 
   if (serialMap_ == Teuchos::null)
   {
@@ -647,6 +755,8 @@ Epetra_LinearProblem * KLSSolver::importToSerial_()
 
   return &*serialProblem_;
 #else
+  usingOriginalProblem_ = true;
+  if (profile_) ++profileStats_.directCalls;
   return problem_;
 #endif
 }
@@ -659,8 +769,10 @@ Epetra_LinearProblem * KLSSolver::importToSerial_()
 //-----------------------------------------------------------------------------
 int KLSSolver::exportToGlobal_()
 {
+  ProfileTimer profileTimer(profile_ ? &profileStats_.exports : 0);
 #ifdef Xyce_PARALLEL_MPI
-  problem_->GetLHS()->Export(*serialLHS_, *serialImporter_, Insert);
+  if (!usingOriginalProblem_)
+    return problem_->GetLHS()->Export(*serialLHS_, *serialImporter_, Insert);
 #endif
   return 0;
 }
