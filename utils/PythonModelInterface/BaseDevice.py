@@ -2,6 +2,7 @@ try:
     from XyceObjects import DeviceOptions, SolverState
 except:
     pass
+import numpy as np
 
 # specifies functions that must be defined
 class BaseDevice(object):
@@ -114,6 +115,11 @@ class BaseDevice(object):
     def setJacStamp(self, jacStamp, b_params, d_params, 
             i_params, s_params):
         pass
+
+    # can mask intern solution variables by setting to 0.0
+    def setErrorWeightMask(self, b_params, d_params, 
+            i_params, s_params):
+        return np.empty((0,), dtype=np.float64)
 
     # called prior to computeXyceVectors, computed results should be
     # store in self.* so that they persist for future 
