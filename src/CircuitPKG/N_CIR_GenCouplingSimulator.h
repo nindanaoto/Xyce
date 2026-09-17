@@ -119,6 +119,9 @@ public:
   /// Associate a vector loader object pointer with the named device
   bool setVectorLoader(const std::string & deviceName, Xyce::Device::VectorComputeInterface * vciPtr);
 
+  /// Set error weighting vector with the named device
+  bool setErrorWeightMask(const std::string & deviceName, std::vector<double> & wM);
+
   /// Populates a vector with the current values of the name/value pairs
   /// for the double params associated with a named device.
   bool getDParams(const std::string & deviceName,

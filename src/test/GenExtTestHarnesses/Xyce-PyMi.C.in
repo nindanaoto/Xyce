@@ -134,6 +134,7 @@ private:
 public:
 
   std::vector< std::vector<int> > jacStamp;
+  std::vector<double> errorWeightMask;
 
   int numExternalVars;
   int numInternalVars;
@@ -669,6 +670,23 @@ public:
     jacStampSet = true;
   }
 
+  void processErrorWeightMask()
+  {
+
+    py::array_t<double> weight_mask = device.attr("setErrorWeightMask")(
+                b_params, 
+                d_params, 
+                i_params, 
+                s_params);
+    
+    if (weight_mask.size() > 0) {
+        errorWeightMask.resize(weight_mask.size());
+        for (size_t i=0; i<weight_mask.size(); ++i) {
+            errorWeightMask[i] = weight_mask.at(i);
+        }
+    }
+  }
+
   void finalize() {
     py::object result = device.attr("finalize")(
             b_params,
@@ -871,6 +889,19 @@ int main(int argc, char **argv)
         exit(1);
       }
     }
+
+    // set error weight mask, if defined
+    pvcs[i].processErrorWeightMask();
+    if (pvcs[i].errorWeightMask.size() > 0) {
+      bsuccess=xyce.setErrorWeightMask(deviceNames[i],pvcs[i].errorWeightMask);
+      if (!bsuccess)
+      {
+        std::cerr << " Failed to set error weight mask for internal variables for " << deviceNames[i]
+                  << std::endl;
+        exit(1);
+      }
+    }
+
 
     // Now tell Xyce to use the vector loader
     bsuccess=xyce.setVectorLoader(deviceNames[i],&pvcs[i]);
