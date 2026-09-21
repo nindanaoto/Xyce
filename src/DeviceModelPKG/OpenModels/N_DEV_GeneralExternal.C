@@ -1355,6 +1355,59 @@ void Instance::getSParams(std::vector<std::string> &names,
   }
 }
 
+//----------------------------------------------------------------------------
+// Function      : Instance::setErrorWeightMask
+// Purpose       : Set the error weight mask
+// Scope         : public
+// Creator       : Paul Kuberry, SNL, Computational and Applied Math
+// Creation Date : 8/16/2026
+//----------------------------------------------------------------------------
+///
+/// Set the error weight matrix
+///
+/// This mask is used to set the weight assigned to the error for each
+/// internal solution variable in the device. This does not set the weights
+/// assigned to terminal solution variables.
+///
+/// If this function is never called, a value of 1.0 is used for each internal
+/// solution variable.
+void Instance::setErrorWeightMask(  std::vector<double> & wM)
+{
+  errorWeightMask_ = wM;
+  
+  if (wM.size()!=numIntVars)
+  {
+    UserFatal(*this) << "Number of internal variables differs from size of error weight mask";
+  }
+}
+
+//-----------------------------------------------------------------------------
+// Function      : Instance::loadErrorWeightMask
+// Purpose       : Apply the stored error weight mask to the device mask vector
+// Scope         : public
+// Creator       : Paul Kuberry, SNL, Computational and Applied Math
+// Creation Date : 8/16/2026
+//-----------------------------------------------------------------------------
+///
+/// Apply the error weight mask that was previously set via setErrorWeightMask()
+/// to the actual device mask vector. This is called by the framework at the
+/// appropriate time when extData.deviceErrorWeightMask_ is valid.
+void Instance::loadErrorWeightMask()
+{
+  if (errorWeightMask_.size() == numIntVars && numIntVars > 0)
+  {
+    Linear::Vector * maskVectorPtr = extData.deviceErrorWeightMask_;
+    
+    if (maskVectorPtr != 0)
+    {
+      for (int i=0; i<numIntVars; i++)
+      {
+        (*maskVectorPtr)[li_Nodes_[numExtVars+i]] = errorWeightMask_[i];
+      }
+    }
+  }
+}
+
 //-----------------------------------------------------------------------------
 // Function      : Instance::constructComposite
 // Purpose       :

@@ -245,6 +245,8 @@ public:
   bool loadDAEFVector ();
   bool loadDAEBVector ();
 
+  void loadErrorWeightMask ();
+
   void auxDAECalculations ();
 
   // load functions, Jacobian:
@@ -256,6 +258,7 @@ public:
   void setNumStateVars(int numState);
   void setNumBranchDataVarsIfAllocated(int numBranchDataIfAllocated);
   void setJacStamp(std::vector< std::vector<int> > & jS);
+  void setErrorWeightMask(std::vector<double> & wM);
   void getSolution(std::vector<double> &sV);
 
   CompositeParam *constructComposite (const std::string &, const std::string &);
@@ -344,6 +347,7 @@ private:
   std::vector<double> BVec_;
   std::vector<double> dFdXdVpVec_;
   std::vector<double> dQdXdVpVec_;
+  std::vector<double> errorWeightMask_;
   std::vector<std::vector<double> > dFdXMat_;
   std::vector<std::vector<double> > dQdXMat_;
   std::vector<std::vector<double> > solVars;
@@ -513,6 +517,7 @@ inline bool Instance::setVectorLoader(Xyce::Device::VectorComputeInterface * vci
 inline void Instance::setNumInternalVars(int numInt)
 {
   numIntVars=numInt;
+  errorWeightMask_ = std::vector<double>(numInt, 1.0);
 }
 
 //----------------------------------------------------------------------------
