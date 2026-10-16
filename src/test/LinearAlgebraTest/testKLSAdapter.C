@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Check local CSR ordering, distributed import, refactor, factor reuse,
-// transpose solves, and multiple right-hand sides against known solutions.
+// transpose solves, same-object graph changes, and multiple right-hand sides.
 #include <Xyce_config.h>
 #ifdef Xyce_PARALLEL_MPI
 #include <mpi.h>
@@ -50,7 +50,7 @@ int runCase(const Epetra_Comm & comm, bool permutedColumns, int rhsCount,
   if (tuningProfile)
     options.addParam(Xyce::Util::Param("KLS_TUNING_PROFILE", tuningProfile));
   Xyce::Linear::KLSSolver solver(problem, options);
-  for (int step = 0; step < 4; ++step)
+  for (int step = 0; step < 7; ++step)
   {
     if (step == 1)
       for (int row = 0; row < rows.NumMyElements(); ++row)
@@ -59,13 +59,30 @@ int runCase(const Epetra_Comm & comm, bool permutedColumns, int rhsCount,
         double increment = 0.75;
         errors += matrix.SumIntoGlobalValues(gid, 1, &increment, &gid) != 0;
       }
+    if (step == 4 || step == 6)
+    {
+      // Keep the matrix address and every row length unchanged while replacing
+      // the columns and storage. Reusing the old symbolic graph is invalid.
+      Epetra_CrsMatrix replacement(Copy, rows, columns, 2);
+      const int shift = step == 4 ? 2 : 1;
+      for (int row = 0; row < rows.NumMyElements(); ++row)
+      {
+        const int gid = rows.GID(row);
+        int cols[2] = {gid, (gid + shift) % n};
+        double vals[2] = {8.0 + gid + step, 0.5 + 0.25 * gid};
+        errors += replacement.InsertGlobalValues(gid, 2, vals, cols) < 0;
+      }
+      errors += replacement.FillComplete(rows, rows) != 0;
+      errors += replacement.OptimizeStorage() != 0;
+      matrix = replacement;
+    }
     for (int col = 0; col < rhsCount; ++col)
       for (int row = 0; row < rows.NumMyElements(); ++row)
         exact[col][row] = (rows.GID(row) + 1.0) * (col + 1.0) + step * 0.25;
-    const bool transpose = step == 3;
+    const bool transpose = step == 3 || step == 6;
     errors += matrix.Multiply(transpose, exact, rhs) != 0;
     solution.PutScalar(0.0);
-    errors += solver.doSolve(step >= 2, transpose) != 0;
+    errors += solver.doSolve(step == 2 || step == 3, transpose) != 0;
     double localError = 0.0, globalError = 0.0;
     for (int col = 0; col < rhsCount; ++col)
       for (int row = 0; row < rows.NumMyElements(); ++row)

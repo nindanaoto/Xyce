@@ -325,7 +325,8 @@ int KLSSolver::doSolve(bool reuse_factors, bool transpose)
       {
         klsStatus = refactorSolve_(prob);
         solutionReady = (klsStatus == KLS_OK);
-        if (klsStatus != KLS_OK)
+        // A changed graph clears the solver and requests fresh analysis.
+        if (klsStatus != KLS_OK && analyzed_)
           klsStatus = factor_(prob);
       }
       else
@@ -638,7 +639,13 @@ int KLSSolver::updateValues_(Epetra_CrsMatrix * matrix, bool * changed)
     return KLS_ERR_INVALID_ARGUMENT;
 
   const int n = matrix->NumMyRows();
-  if (static_cast<std::size_t>(matrix->NumMyNonzeros()) != values_.size() ||
+  const int nnz = matrix->NumMyNonzeros();
+  if (n < 0 || nnz < 0)
+    return KLS_ERR_INVALID_ARGUMENT;
+  if (matrix->NumGlobalRows() != matrix->NumGlobalCols() ||
+      n != matrix->NumGlobalRows() ||
+      static_cast<std::size_t>(nnz) != values_.size() ||
+      colIdx_.size() != values_.size() ||
       rowPtr_.size() != static_cast<std::size_t>(n) + 1)
   {
     clearAnalysis_();
@@ -651,12 +658,18 @@ int KLSSolver::updateValues_(Epetra_CrsMatrix * matrix, bool * changed)
   {
     int numEntries = 0;
     double * rowValues = 0;
-    const int ierr = matrix->ExtractMyRowView(row, numEntries, rowValues);
+    int * indices = 0;
+    const int ierr = matrix->ExtractMyRowView(row, numEntries, rowValues, indices);
     if (ierr != 0)
+      return KLS_ERR_INVALID_ARGUMENT;
+    if (numEntries < 0 || numEntries > nnz - offset ||
+        (numEntries > 0 && (!indices || !rowValues)))
       return KLS_ERR_INVALID_ARGUMENT;
 
     if (rowPtr_[static_cast<std::size_t>(row)] != offset ||
-        rowPtr_[static_cast<std::size_t>(row) + 1] != offset + numEntries)
+        rowPtr_[static_cast<std::size_t>(row) + 1] != offset + numEntries ||
+        (numEntries > 0 && std::memcmp(&colIdx_[static_cast<std::size_t>(offset)],
+          indices, static_cast<std::size_t>(numEntries) * sizeof(int)) != 0))
     {
       clearAnalysis_();
       return KLS_ERR_UNSUPPORTED;
@@ -677,7 +690,6 @@ int KLSSolver::updateValues_(Epetra_CrsMatrix * matrix, bool * changed)
 
   if (changed)
     *changed = anyChanged;
-
   return KLS_OK;
 }
 
@@ -711,7 +723,6 @@ Epetra_LinearProblem * KLSSolver::importToSerial_()
 {
   ProfileTimer profileTimer(profile_ ? &profileStats_.imports : 0);
   usingOriginalProblem_ = false;
-#ifdef Xyce_PARALLEL_MPI
   Epetra_CrsMatrix * origMat = dynamic_cast<Epetra_CrsMatrix *>(problem_->GetOperator());
 
   // Local CSR column indices must address the same ordering as matrix rows
@@ -728,7 +739,9 @@ Epetra_LinearProblem * KLSSolver::importToSerial_()
     return problem_;
   }
 
-  if (serialMap_ == Teuchos::null)
+  if (serialMap_ == Teuchos::null ||
+      !serialImporter_->SourceMap().SameAs(origMat->RowMap()) ||
+      serialRHS_->NumVectors() != problem_->GetRHS()->NumVectors())
   {
     const Epetra_Map & origMap = origMat->RowMap();
     const int myPID = origMap.Comm().MyPID();
@@ -742,11 +755,13 @@ Epetra_LinearProblem * KLSSolver::importToSerial_()
     serialLHS_ = Teuchos::rcp(new Epetra_MultiVector(*serialMap_, numVectors));
     serialRHS_ = Teuchos::rcp(new Epetra_MultiVector(*serialMap_, numVectors));
     serialImporter_ = Teuchos::rcp(new Epetra_Import(*serialMap_, origMap));
-    serialMat_ = Teuchos::rcp(new Epetra_CrsMatrix(Copy, *serialMap_, 0));
-    serialProblem_ =
-      Teuchos::rcp(new Epetra_LinearProblem(&*serialMat_, &*serialLHS_, &*serialRHS_));
   }
 
+  // Import into a fresh graph: an existing filled graph cannot receive new
+  // columns when the original matrix changes in place.
+  serialMat_ = Teuchos::rcp(new Epetra_CrsMatrix(Copy, *serialMap_, 0));
+  serialProblem_ =
+    Teuchos::rcp(new Epetra_LinearProblem(&*serialMat_, &*serialLHS_, &*serialRHS_));
   serialMat_->Import(*origMat, *serialImporter_, Insert);
   serialMat_->FillComplete();
   serialMat_->OptimizeStorage();
@@ -754,11 +769,6 @@ Epetra_LinearProblem * KLSSolver::importToSerial_()
   serialRHS_->Import(*problem_->GetRHS(), *serialImporter_, Insert);
 
   return &*serialProblem_;
-#else
-  usingOriginalProblem_ = true;
-  if (profile_) ++profileStats_.directCalls;
-  return problem_;
-#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -770,10 +780,8 @@ Epetra_LinearProblem * KLSSolver::importToSerial_()
 int KLSSolver::exportToGlobal_()
 {
   ProfileTimer profileTimer(profile_ ? &profileStats_.exports : 0);
-#ifdef Xyce_PARALLEL_MPI
   if (!usingOriginalProblem_)
     return problem_->GetLHS()->Export(*serialLHS_, *serialImporter_, Insert);
-#endif
   return 0;
 }
 
