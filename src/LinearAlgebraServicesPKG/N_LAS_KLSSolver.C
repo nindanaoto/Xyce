@@ -23,6 +23,7 @@
 #include <Xyce_config.h>
 
 #include <cstring>
+#include <cstdint>
 #include <chrono>
 #include <iostream>
 #include <sstream>
@@ -650,6 +651,52 @@ int KLSSolver::updateValues_(Epetra_CrsMatrix * matrix, bool * changed)
   {
     clearAnalysis_();
     return KLS_ERR_UNSUPPORTED;
+  }
+
+  // Borrow storage for this call only; values_ remains the owned snapshot.
+  int * offsets = 0;
+  int * indices = 0;
+  double * coefficients = 0;
+  if (matrix->ExtractCrsDataPointers(offsets, indices, coefficients) == 0 &&
+      offsets && (nnz == 0 || (indices && coefficients)))
+  {
+    if (std::memcmp(&rowPtr_[0], offsets, rowPtr_.size() * sizeof(int)) != 0 ||
+        (nnz > 0 && std::memcmp(&colIdx_[0], indices,
+                               colIdx_.size() * sizeof(int)) != 0))
+    {
+      clearAnalysis_();
+      return KLS_ERR_UNSUPPORTED;
+    }
+    bool anyChanged = false;
+    double * destination = values_.data();
+    const std::size_t count = values_.size();
+    // Compare and copy aligned cache-line chunks of the owned snapshot.
+    // Every changed byte is refreshed; unchanged chunks keep their storage.
+    const std::size_t copyBytes = 64;
+    const std::size_t copyEntries = copyBytes / sizeof(double);
+    const auto copyChanged = [&](std::size_t offset, std::size_t entries)
+    {
+      if (entries > 0)
+      {
+        const std::size_t bytes = entries * sizeof(double);
+        if (std::memcmp(destination + offset, coefficients + offset, bytes) != 0)
+        {
+          anyChanged = true;
+          std::memcpy(destination + offset, coefficients + offset, bytes);
+        }
+      }
+    };
+    const std::size_t alignment =
+      reinterpret_cast<std::uintptr_t>(destination) % copyBytes;
+    const std::size_t prefix = ((copyBytes - alignment) % copyBytes) / sizeof(double);
+    std::size_t offset = prefix < count ? prefix : count;
+    copyChanged(0, offset);
+    for (; count - offset >= copyEntries; offset += copyEntries)
+      copyChanged(offset, copyEntries);
+    copyChanged(offset, count - offset);
+    if (changed)
+      *changed = anyChanged;
+    return KLS_OK;
   }
 
   bool anyChanged = false;

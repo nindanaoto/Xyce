@@ -20,7 +20,8 @@
 #include <iostream>
 
 int runCase(const Epetra_Comm & comm, bool permutedColumns, int rhsCount,
-            const char * backend, const char * tuningProfile, bool refactorEnabled)
+            const char * backend, const char * tuningProfile, bool refactorEnabled,
+            bool optimizedStorage)
 {
   const int n = 4;
   Epetra_Map rows(n, 0, comm);
@@ -37,8 +38,10 @@ int runCase(const Epetra_Comm & comm, bool permutedColumns, int rhsCount,
     double vals[2] = {4.0 + gid, 0.5 + 0.25 * gid};
     errors += matrix.InsertGlobalValues(gid, 2, vals, cols) < 0;
   }
-  errors += matrix.FillComplete(rows, rows) != 0;
-  errors += matrix.OptimizeStorage() != 0;
+  errors += matrix.FillComplete(rows, rows, optimizedStorage) != 0;
+  if (optimizedStorage)
+    errors += matrix.OptimizeStorage() != 0;
+  errors += matrix.StorageOptimized() != optimizedStorage;
   Epetra_MultiVector solution(rows, rhsCount), rhs(rows, rhsCount), exact(rows, rhsCount);
   Teuchos::RCP<Epetra_LinearProblem> epetra = Teuchos::rcp(
     new Epetra_LinearProblem(&matrix, &solution, &rhs));
@@ -72,8 +75,10 @@ int runCase(const Epetra_Comm & comm, bool permutedColumns, int rhsCount,
         double vals[2] = {8.0 + gid + step, 0.5 + 0.25 * gid};
         errors += replacement.InsertGlobalValues(gid, 2, vals, cols) < 0;
       }
-      errors += replacement.FillComplete(rows, rows) != 0;
-      errors += replacement.OptimizeStorage() != 0;
+      errors += replacement.FillComplete(rows, rows, optimizedStorage) != 0;
+      if (optimizedStorage)
+        errors += replacement.OptimizeStorage() != 0;
+      errors += replacement.StorageOptimized() != optimizedStorage;
       matrix = replacement;
     }
     for (int col = 0; col < rhsCount; ++col)
@@ -123,8 +128,10 @@ int main(int argc, char ** argv)
       for (bool permuted : {false, true})
         for (int rhsCount : {1, 2})
          for (bool refactorEnabled : {false, true})
-          errors += runCase(comm, permuted, rhsCount, backend,
-                            argc > 1 ? argv[1] : 0, refactorEnabled);
+          for (bool optimizedStorage : {false, true})
+            errors += runCase(comm, permuted, rhsCount, backend,
+                              argc > 1 ? argv[1] : 0, refactorEnabled,
+                              optimizedStorage);
     comm.MaxAll(&errors, &result, 1);
     if (comm.MyPID() == 0)
       std::cout << (result ? "KLS adapter regression FAILED" : "KLS adapter regression passed") << std::endl;
