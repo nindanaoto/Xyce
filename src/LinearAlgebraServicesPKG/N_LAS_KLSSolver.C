@@ -610,9 +610,13 @@ int KLSSolver::buildCSR_(Epetra_CrsMatrix * matrix)
     rowPtr_[static_cast<std::size_t>(row)] = offset;
     for (int entry = 0; entry < numEntries; ++entry)
     {
-      if (indices[entry] < 0 || indices[entry] >= n)
+      // Epetra row views use local column-map IDs, while KLS's x
+      // follows the operator domain map. They can differ on one rank.
+      const int globalColumn = matrix->ColMap().GID(indices[entry]);
+      const int domainColumn = matrix->DomainMap().LID(globalColumn);
+      if (domainColumn < 0 || domainColumn >= n)
         return KLS_ERR_UNSUPPORTED;
-      colIdx_[static_cast<std::size_t>(offset)] = indices[entry];
+      colIdx_[static_cast<std::size_t>(offset)] = domainColumn;
       values_[static_cast<std::size_t>(offset)] = rowValues[entry];
       ++offset;
     }
@@ -651,7 +655,8 @@ int KLSSolver::updateValues_(Epetra_CrsMatrix * matrix, bool * changed)
   {
     int numEntries = 0;
     double * rowValues = 0;
-    const int ierr = matrix->ExtractMyRowView(row, numEntries, rowValues);
+    int * indices = 0;
+    const int ierr = matrix->ExtractMyRowView(row, numEntries, rowValues, indices);
     if (ierr != 0)
       return KLS_ERR_INVALID_ARGUMENT;
 
@@ -660,6 +665,18 @@ int KLSSolver::updateValues_(Epetra_CrsMatrix * matrix, bool * changed)
     {
       clearAnalysis_();
       return KLS_ERR_UNSUPPORTED;
+    }
+
+    for (int entry = 0; entry < numEntries; ++entry)
+    {
+      const int globalColumn = matrix->ColMap().GID(indices[entry]);
+      const int domainColumn = matrix->DomainMap().LID(globalColumn);
+      if (domainColumn < 0 || domainColumn >= n ||
+          colIdx_[static_cast<std::size_t>(offset + entry)] != domainColumn)
+      {
+        clearAnalysis_();
+        return KLS_ERR_UNSUPPORTED;
+      }
     }
 
     if (numEntries > 0)
