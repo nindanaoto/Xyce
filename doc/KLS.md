@@ -10,10 +10,12 @@ Select KLS in a netlist:
 .options linsol type=KLS KLS_THREADS=1
 ```
 
-The MPI-enabled adapter uses the original matrix directly when there is one
-MPI rank and the matrix row, column, domain, range, and vector maps agree.
-Other layouts retain the import-to-rank-zero path. The shortcut changes data
-handling, not the default KLS numerical policy.
+The adapter uses the original matrix directly on one rank when the matrix
+row, domain, range, and vector maps agree. It translates local column-map
+IDs through global IDs into domain-local indices, including permuted column
+maps. Other layouts retain the import-to-rank-zero path. Contiguous value
+copying requires identical column and domain maps; other maps use translated
+row views. The shortcut preserves the default KLS numerical policy.
 
 ## Backend selection
 
@@ -64,5 +66,6 @@ Use profiling for diagnosis and leave it off for final performance timings.
 With `BUILD_TESTING=ON`, build `testKLSAdapter` and run
 `ctest -R '^testKLSAdapter' --output-on-failure`. The tests compare against
 known solutions for normal and permuted column maps, changing numeric
-values, factor reuse, transpose solves, and multiple right-hand sides,
-using both AUTO and SERIAL. MPI builds also register a four-rank test.
+values, factor reuse, transpose solves, same-object graph changes, and
+multiple right-hand sides, using both AUTO and SERIAL and both optimized
+and unoptimized storage. MPI builds also register a four-rank test.

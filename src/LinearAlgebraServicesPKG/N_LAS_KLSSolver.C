@@ -612,9 +612,13 @@ int KLSSolver::buildCSR_(Epetra_CrsMatrix * matrix)
     rowPtr_[static_cast<std::size_t>(row)] = offset;
     for (int entry = 0; entry < numEntries; ++entry)
     {
-      if (indices[entry] < 0 || indices[entry] >= n)
+      // Epetra row views use local column-map IDs, while KLS's x
+      // follows the operator domain map. They can differ on one rank.
+      const int globalColumn = matrix->ColMap().GID(indices[entry]);
+      const int domainColumn = matrix->DomainMap().LID(globalColumn);
+      if (domainColumn < 0 || domainColumn >= n)
         return KLS_ERR_UNSUPPORTED;
-      colIdx_[static_cast<std::size_t>(offset)] = indices[entry];
+      colIdx_[static_cast<std::size_t>(offset)] = domainColumn;
       values_[static_cast<std::size_t>(offset)] = rowValues[entry];
       ++offset;
     }
@@ -657,7 +661,10 @@ int KLSSolver::updateValues_(Epetra_CrsMatrix * matrix, bool * changed)
   int * offsets = 0;
   int * indices = 0;
   double * coefficients = 0;
-  if (matrix->ExtractCrsDataPointers(offsets, indices, coefficients) == 0 &&
+  // Raw local column IDs are already domain-local only for identical maps.
+  // Other maps use the translated row-view checks below.
+  if (matrix->ColMap().SameAs(matrix->DomainMap()) &&
+      matrix->ExtractCrsDataPointers(offsets, indices, coefficients) == 0 &&
       offsets && (nnz == 0 || (indices && coefficients)))
   {
     if (std::memcmp(&rowPtr_[0], offsets, rowPtr_.size() * sizeof(int)) != 0 ||
@@ -714,12 +721,22 @@ int KLSSolver::updateValues_(Epetra_CrsMatrix * matrix, bool * changed)
       return KLS_ERR_INVALID_ARGUMENT;
 
     if (rowPtr_[static_cast<std::size_t>(row)] != offset ||
-        rowPtr_[static_cast<std::size_t>(row) + 1] != offset + numEntries ||
-        (numEntries > 0 && std::memcmp(&colIdx_[static_cast<std::size_t>(offset)],
-          indices, static_cast<std::size_t>(numEntries) * sizeof(int)) != 0))
+        rowPtr_[static_cast<std::size_t>(row) + 1] != offset + numEntries)
     {
       clearAnalysis_();
       return KLS_ERR_UNSUPPORTED;
+    }
+
+    for (int entry = 0; entry < numEntries; ++entry)
+    {
+      const int globalColumn = matrix->ColMap().GID(indices[entry]);
+      const int domainColumn = matrix->DomainMap().LID(globalColumn);
+      if (domainColumn < 0 || domainColumn >= n ||
+          colIdx_[static_cast<std::size_t>(offset + entry)] != domainColumn)
+      {
+        clearAnalysis_();
+        return KLS_ERR_UNSUPPORTED;
+      }
     }
 
     if (numEntries > 0)
@@ -772,10 +789,10 @@ Epetra_LinearProblem * KLSSolver::importToSerial_()
   usingOriginalProblem_ = false;
   Epetra_CrsMatrix * origMat = dynamic_cast<Epetra_CrsMatrix *>(problem_->GetOperator());
 
-  // Local CSR column indices must address the same ordering as matrix rows
-  // and both vectors. A single rank alone does not guarantee this.
+  // Rows and both vectors must share their ordering on a single rank.
+  // Column-map IDs are translated to domain-local IDs when building/checking
+  // CSR, so a permuted column map does not require a serial import.
   if (origMat->Comm().NumProc() == 1 &&
-      origMat->RowMap().SameAs(origMat->ColMap()) &&
       origMat->RowMap().SameAs(origMat->OperatorDomainMap()) &&
       origMat->RowMap().SameAs(origMat->OperatorRangeMap()) &&
       origMat->RowMap().SameAs(problem_->GetLHS()->Map()) &&
