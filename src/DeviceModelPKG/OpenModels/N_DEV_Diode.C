@@ -444,6 +444,7 @@ Instance::Instance(
     tSatSWCur(0.0),
     tVcrit(0.0),
     tF1(0.0),
+    tF1SW(0.0),
     tBrkdwnV(0.0),
     tSatCurR(0.0),
     tIKF(0.0),
@@ -1393,7 +1394,7 @@ bool Instance::updateIntermediateVars ()
       double Czof2SW = CzeroSW / F2SW;
       double MotJctSWPot = MJSW / tJctSWPot;
 
-      Qd += CzeroSW * tF1 +
+      Qd += CzeroSW * tF1SW +
             Czof2SW * (F3SW * (Vc - tDepSWCap) + (0.5 * MotJctSWPot) *
                        (Vc * Vc - tDepSWCap * tDepSWCap));
       Cd += Czof2SW * (F3SW + MotJctSWPot * Vc);
@@ -1432,6 +1433,7 @@ bool Instance::updateTemperature( const double & temp_tmp )
   double vtnom = CONSTKoverQ * model_.TNOM;
 
   double xfc = log( 1.0 - model_.FC );
+  double xfcs = log( 1.0 - model_.FCS );
 
   if( temp_tmp != -999.0 )
   { 
@@ -1491,6 +1493,8 @@ bool Instance::updateTemperature( const double & temp_tmp )
 
   tDepCap = model_.FC*tJctPot;
 
+  // Sidewall charge must join continuously at its own forward transition.
+  tF1SW = tJctSWPot*(1.0-exp((1.0-model_.MJSW)*xfcs))/(1.0-model_.MJSW);
   tDepSWCap = model_.FCS*tJctSWPot;
 
 
@@ -2051,6 +2055,7 @@ bool updateTemperature
    ScalarT & tJctSWPot,
    ScalarT & tDepSWCap,
    ScalarT & tF1,
+   ScalarT & tF1SW,
    ScalarT & tSatCur,
    ScalarT & tSatSWCur,
    ScalarT & tSatCurR,
@@ -2113,6 +2118,7 @@ bool updateTemperature
   ScalarT vtnom = KoverQ * TNOM;
 
   ScalarT xfc = log( 1.0 - FC );
+  ScalarT xfcs = log( 1.0 - FCS );
 
   if( temp != -999.0 )
   { 
@@ -2171,6 +2177,8 @@ bool updateTemperature
 
   tDepCap = FC*tJctPot;
 
+  // Use the same sidewall constant as the ordinary evaluation above.
+  tF1SW = tJctSWPot*(1.0-exp((1.0-MJSW)*xfcs))/(1.0-MJSW);
   tDepSWCap = FCS*tJctSWPot;
 
   ScalarT vte = N*vt;
@@ -2263,6 +2271,7 @@ bool updateIntermediateVars (
    const ScalarT & tJctSWPot,
    const ScalarT & tDepSWCap,
    const ScalarT & tF1,
+   const ScalarT & tF1SW,
    const ScalarT & tSatCur,
    const ScalarT & tSatSWCur,
    const ScalarT & tSatCurR,
@@ -2478,7 +2487,7 @@ bool updateIntermediateVars (
       ScalarT Czof2SW = CzeroSW / F2SW;
       ScalarT MotJctSWPot = MJSW / tJctSWPot;
 
-      Qd += CzeroSW * tF1 +
+      Qd += CzeroSW * tF1SW +
             Czof2SW * (F3SW * (Vc - tDepSWCap) + (0.5 * MotJctSWPot) *
                        (Vc * Vc - tDepSWCap * tDepSWCap));
       Cd += Czof2SW * (F3SW + MotJctSWPot * Vc);
@@ -2742,6 +2751,7 @@ void diodeSensitivity::operator()(
     fadType tJctSWPot = 0.0;
     fadType tDepSWCap = 0.0;
     fadType tF1 = 0.0;
+    fadType tF1SW = 0.0;
     fadType tSatCur = 0.0;
     fadType tSatSWCur = 0.0;
     fadType tSatCurR = 0.0;
@@ -2777,7 +2787,7 @@ void diodeSensitivity::operator()(
        (*in)->Temp,
        (*in)->dtemp,
        Temp, tJctCap, tJctPot, tDepCap, tJctSWCap, tJctSWPot, tDepSWCap,
-       tF1, tSatCur, tSatSWCur, tSatCurR,
+       tF1, tF1SW, tSatCur, tSatSWCur, tSatCurR,
        tVcrit, tRS, tCOND, tIKF, tBrkdwnV,
        TNOM, VJ, VJSW, CJO, CJSW, M, N, MJSW, NS, IS, JSW,
        EG, XTI, RS, COND, IRF,
@@ -2798,7 +2808,7 @@ void diodeSensitivity::operator()(
       // inputs:
       Vp, Vpp, Vn, Vd,
       // instance params:
-      Temp, tJctCap, tJctPot, tDepCap, tJctSWCap, tJctSWPot, tDepSWCap, tF1,
+      Temp, tJctCap, tJctPot, tDepCap, tJctSWCap, tJctSWPot, tDepSWCap, tF1, tF1SW,
       tSatCur, tSatSWCur, tSatCurR, tVcrit, tRS, tCOND,
       tIKF, tBrkdwnV,
       // instance variables:

@@ -139,3 +139,21 @@ as the problems are identified.  For now try running "ctest --rerun-failed ". If
 test then passes, it's likely that the test was conflicting with another test run in 
 parallel.
 
+
+The self-contained DiodeSidewallCharge test is registered when BUILD_TESTING
+is enabled and a Python 3.7 or newer interpreter is available. It does not require
+Xyce_Regression, Google Test, ngspice, or a foundry PDK:
+
+  ctest --test-dir <build-directory> -R '^DiodeSidewallCharge$' --output-on-failure
+
+To retain generated netlists, simulator logs, and CSV measurements:
+
+  python3 test/DeviceModelPKG/diode_charge.py <Xyce-executable> --output <new-directory>
+
+The regression checks native charge against an independent capacitance integral
+and differentiates native charge across the sidewall continuation threshold.
+It covers levels 1 and 2, unequal and matching junction parameters, zero sidewall
+capacitance, non-default FCS, and MJSW approaching one. It also requires complete
+rising/falling transients at -40, 27, and 125 C, and compares forced analytic
+transient sensitivities against external central parameter differences.
+The existing singularity at exactly MJSW=1 is outside this regression's domain.

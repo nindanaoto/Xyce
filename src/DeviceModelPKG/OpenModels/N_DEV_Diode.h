@@ -125,6 +125,7 @@ bool updateTemperature
    ScalarT & tJctSWPot,
    ScalarT & tDepSWCap,
    ScalarT & tF1,
+   ScalarT & tF1SW,
    ScalarT & tSatCur,
    ScalarT & tSatSWCur,
    ScalarT & tSatCurR,
@@ -188,6 +189,7 @@ bool updateIntermediateVars
    const ScalarT & tJctSWPot,
    const ScalarT & tDepSWCap,
    const ScalarT & tF1,
+   const ScalarT & tF1SW,
    const ScalarT & tSatCur,
    const ScalarT & tSatSWCur,
    const ScalarT & tSatCurR,
@@ -382,6 +384,7 @@ private:
   double tSatSWCur;
   double tVcrit;
   double tF1;
+  double tF1SW;
   double tBrkdwnV;
   double tSatCurR;
   double tIKF;

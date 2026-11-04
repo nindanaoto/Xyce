@@ -11,3 +11,10 @@ if(Xyce_GTEST_UNIT_TESTS)
   add_subdirectory(IOInterfacePKG)
   add_subdirectory(UtilityPKG)
 endif()
+
+find_package(Python3 3.7 QUIET COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+  add_test(NAME DiodeSidewallCharge
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/DeviceModelPKG/diode_charge.py $<TARGET_FILE:Xyce>)
+  set_tests_properties(DiodeSidewallCharge PROPERTIES LABELS "nightly;diode" TIMEOUT 300)
+endif()
