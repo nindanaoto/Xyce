@@ -32,6 +32,8 @@
 # ***** READ THE TEXT ABOVE BEFORE YOU CHANGE ANYTHING IN THIS FILE *****
 # ---------------------------------------------------------------------
 
+find_package(Xyce_Dependencies CONFIG)
+
 ###################
 ## Trilinos
 ###################

@@ -40,6 +40,7 @@
 #include <N_DEV_DeviceBlock.h>
 #include <N_DEV_DeviceInstance.h>
 #include <N_DEV_VectorComputeInterface.h>
+#include <N_DEV_VectorComputeInterfaceWithLimiting.h>
 #include <N_DEV_CompositeParam.h>
 
 namespace Xyce {
@@ -245,6 +246,8 @@ public:
   bool loadDAEFVector ();
   bool loadDAEBVector ();
 
+  void loadErrorWeightMask ();
+
   void auxDAECalculations ();
 
   // load functions, Jacobian:
@@ -256,6 +259,7 @@ public:
   void setNumStateVars(int numState);
   void setNumBranchDataVarsIfAllocated(int numBranchDataIfAllocated);
   void setJacStamp(std::vector< std::vector<int> > & jS);
+  void setErrorWeightMask(std::vector<double> & wM);
   void getSolution(std::vector<double> &sV);
 
   CompositeParam *constructComposite (const std::string &, const std::string &);
@@ -321,6 +325,7 @@ private:
   std::vector< std::vector<int> > jacStamp_;
 
   Xyce::Device::VectorComputeInterface * vciPtr_;
+  Xyce::Device::VectorComputeInterfaceWithLimiting * vciPtrWLimiting_;
 
   /// Vectors and matrices for storing local representations of F,
   /// Q, and B vectors, used for passing to the computeXyceVectors
@@ -344,6 +349,7 @@ private:
   std::vector<double> BVec_;
   std::vector<double> dFdXdVpVec_;
   std::vector<double> dQdXdVpVec_;
+  std::vector<double> errorWeightMask_;
   std::vector<std::vector<double> > dFdXMat_;
   std::vector<std::vector<double> > dQdXMat_;
   std::vector<std::vector<double> > solVars;
@@ -490,6 +496,8 @@ inline bool Instance::setVectorLoader(Xyce::Device::VectorComputeInterface * vci
   if (vciPtr)
   {
     vciPtr_=vciPtr;
+    vciPtrWLimiting_ = 
+        dynamic_cast<Xyce::Device::VectorComputeInterfaceWithLimiting*>(vciPtr_);
     haveFDLoads_ = vciPtr_->haveFDLoads();
   }
   else
@@ -513,6 +521,7 @@ inline bool Instance::setVectorLoader(Xyce::Device::VectorComputeInterface * vci
 inline void Instance::setNumInternalVars(int numInt)
 {
   numIntVars=numInt;
+  errorWeightMask_ = std::vector<double>(numInt, 1.0);
 }
 
 //----------------------------------------------------------------------------

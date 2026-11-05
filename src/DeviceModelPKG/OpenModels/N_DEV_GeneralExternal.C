@@ -360,7 +360,8 @@ Instance::Instance(
 
   : DeviceInstance(IB, configuration.getInstanceParameters(), factory_block),
     model_(Miter),
-    vciPtr_(0)
+    vciPtr_(0),
+    vciPtrWLimiting_(0)
 {
   numExtVars   = IB.numExtVars;  // we have as many as were specified on the
                                  // instance line
@@ -768,10 +769,7 @@ bool Instance::updateIntermediateVars ()
     for (int i=0;i<numVars;i++)
       solutionVars_[i] = solVector[li_Nodes_[i]];
 
-    Xyce::Device::VectorComputeInterfaceWithLimiting* vciPtrWLimiting = 
-        dynamic_cast<Xyce::Device::VectorComputeInterfaceWithLimiting*>(vciPtr_);
-
-    if (vciPtrWLimiting!=NULL) // successful cast means that vciPtr_ is of
+    if (vciPtrWLimiting_!=NULL) // successful cast means that vciPtr_ is of
                                // type VectorComputeInterfaceWithLimiting
     {
 
@@ -868,7 +866,7 @@ bool Instance::updateIntermediateVars ()
       // Call back to the computation object and get this devices
       // contributions.  IT IS THAT FUNCTION'S RESPONSIBILITY TO SIZE THESE
       // VECTORS APPROPRIATELY!
-      bsuccess=vciPtrWLimiting->computeXyceVectorsWithLimiting(flagSolutionVars_,
+      bsuccess=vciPtrWLimiting_->computeXyceVectorsWithLimiting(flagSolutionVars_,
                                            solVars, storeVars, stateVars,
                                            getDeviceOptions(),
                                            getSolverState(),
@@ -1059,10 +1057,7 @@ bool Instance::loadDAEQVector ()
 
   if( getDeviceOptions().voltageLimiterFlag )
   {
-    Xyce::Device::VectorComputeInterfaceWithLimiting* vciPtrWLimiting =
-        dynamic_cast<Xyce::Device::VectorComputeInterfaceWithLimiting*>(vciPtr_);
-    // successful cast means that vciPtr_ is of type VectorComputeInterfaceWithLimiting
-    if (vciPtrWLimiting!=NULL && !dQdXdVpVec_.empty())
+    if (vciPtrWLimiting_!=NULL && !dQdXdVpVec_.empty())
     {
       double * dQdxdVpVector = extData.dQdxdVpVectorRawPtr;
       for (int i=0; i<numVars; i++)
@@ -1111,10 +1106,7 @@ bool Instance::loadDAEFVector ()
 
   if( getDeviceOptions().voltageLimiterFlag )
   {
-    Xyce::Device::VectorComputeInterfaceWithLimiting* vciPtrWLimiting = 
-        dynamic_cast<Xyce::Device::VectorComputeInterfaceWithLimiting*>(vciPtr_);
-    // successful cast means that vciPtr_ is of type VectorComputeInterfaceWithLimiting
-    if (vciPtrWLimiting!=NULL && !dFdXdVpVec_.empty())
+    if (vciPtrWLimiting_!=NULL && !dFdXdVpVec_.empty())
     {
       double * dFdxdVpVector = extData.dFdxdVpVectorRawPtr;
       for (int i=0; i<numVars; i++)
@@ -1352,6 +1344,59 @@ void Instance::getSParams(std::vector<std::string> &names,
   {
     names.push_back(stringDataVec_[i]->getName());
     values.push_back(stringDataVec_[i]->getValue());
+  }
+}
+
+//----------------------------------------------------------------------------
+// Function      : Instance::setErrorWeightMask
+// Purpose       : Set the error weight mask
+// Scope         : public
+// Creator       : Paul Kuberry, SNL, Computational and Applied Math
+// Creation Date : 8/16/2026
+//----------------------------------------------------------------------------
+///
+/// Set the error weight matrix
+///
+/// This mask is used to set the weight assigned to the error for each
+/// internal solution variable in the device. This does not set the weights
+/// assigned to terminal solution variables.
+///
+/// If this function is never called, a value of 1.0 is used for each internal
+/// solution variable.
+void Instance::setErrorWeightMask(  std::vector<double> & wM)
+{
+  errorWeightMask_ = wM;
+  
+  if (wM.size()!=numIntVars)
+  {
+    UserFatal(*this) << "Number of internal variables differs from size of error weight mask";
+  }
+}
+
+//-----------------------------------------------------------------------------
+// Function      : Instance::loadErrorWeightMask
+// Purpose       : Apply the stored error weight mask to the device mask vector
+// Scope         : public
+// Creator       : Paul Kuberry, SNL, Computational and Applied Math
+// Creation Date : 8/16/2026
+//-----------------------------------------------------------------------------
+///
+/// Apply the error weight mask that was previously set via setErrorWeightMask()
+/// to the actual device mask vector. This is called by the framework at the
+/// appropriate time when extData.deviceErrorWeightMask_ is valid.
+void Instance::loadErrorWeightMask()
+{
+  if (errorWeightMask_.size() == numIntVars && numIntVars > 0)
+  {
+    Linear::Vector * maskVectorPtr = extData.deviceErrorWeightMask_;
+    
+    if (maskVectorPtr != 0)
+    {
+      for (int i=0; i<numIntVars; i++)
+      {
+        (*maskVectorPtr)[li_Nodes_[numExtVars+i]] = errorWeightMask_[i];
+      }
+    }
   }
 }
 

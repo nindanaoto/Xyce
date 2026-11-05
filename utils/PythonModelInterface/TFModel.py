@@ -6,10 +6,10 @@ if len(sys.argv)==0:
 
 
 import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras import layers
+import keras
+from keras import layers
 import numpy as np
-import tensorflow.keras.backend as K
+import keras.backend as K
 import h5py
 import importlib
 
@@ -21,19 +21,10 @@ class TFModel(object):
 
         assert os.path.isabs(fname), "Relative path given to TFModel construction."
 
-        EAGER = False
-        # disable eager execution for TF2 and initialize with a seed
-        # to get reproducible results
-        if not EAGER:
-            tf.compat.v1.disable_eager_execution()
-            tf.keras.backend.clear_session()
-            sess = tf.compat.v1.Session()
-            tf.random.set_seed(100234)
-            tf.compat.v1.keras.backend.set_session(sess)
-            tf.compat.v1.global_variables_initializer()
-        else:
-            tf.keras.backend.clear_session()
-            tf.random.set_seed(100234)
+        # TF2 eager / Keras 3
+        keras.backend.clear_session()
+        # seed for reproducibility
+        tf.random.set_seed(100234)
 
         with h5py.File(fname, 'r') as f:
             for group in f.keys():
@@ -76,18 +67,8 @@ class TFModel(object):
             exec(custom_losses_data, custom_losses_module.__dict__)
             exec(data_transform_data, data_transform_module.__dict__)
 
-        prms_spec = importlib.util.spec_from_loader('prms', loader=None)
-        prms = importlib.util.module_from_spec(prms_spec)
-        prms.__dict__.update(custom_layers_module.__dict__)
-        prms.__dict__.update(custom_losses_module.__dict__)
-        prms.__dict__.update(data_transform_module.__dict__)
-        if 'custom_layers_data' in locals() and 'custom_losses_data' in locals() \
-                and 'data_transform_data' in locals() and 'parameter_data' in locals():
-            exec(parameter_data, globals(), prms.__dict__)
-            if (prms.PRECISION.lower()=="double"):
-                K.set_floatx('float64')
-        else:
-            K.set_floatx('float64')
+        # PRECISION. The float64 weights in the shipped models require float64
+        K.set_floatx('float64')
 
 
         customLayersClasses = dict([(name, cls) for name, cls in custom_layers_module.__dict__.items() if isinstance(cls, type)])
@@ -96,16 +77,10 @@ class TFModel(object):
         customObjects.update(customLayersClasses)
         customObjects.update(customLossesClasses)
 
-        self.tf_model = keras.models.load_model(fname, custom_objects=customObjects, compile=True)
-        self.sess = tf.compat.v1.keras.backend.get_session()
-        self.loss = self.tf_model.output
-        self.inputs = self.tf_model.input
-        self.grads = tf.keras.backend.gradients(self.loss, self.inputs)
-        if 'custom_layers_data' in locals() and 'custom_losses_data' in locals() \
-                and 'data_transform_data' in locals() and 'parameter_data' in locals():
-            self.transform = prms.DATA_TRANSFORM
-        else:
-            self.transform = None
+        self.tf_model = keras.models.load_model(fname, custom_objects=customObjects, compile=False)
+        # DATA_TRANSFORM is defined only by models that ship a data_transform blob
+        # None here means predict/gradient pass values through untransformed
+        self.transform = getattr(data_transform_module, 'DATA_TRANSFORM', None)
 
         # for storing last evaluated value
         self.last_input_value = sys.float_info.max
@@ -113,6 +88,7 @@ class TFModel(object):
         self.last_output_gradient = None
 
     def eval_if_needed(self, input_value):
+        input_value = float(np.asarray(input_value).reshape(-1)[0])
         if (input_value!=self.last_input_value):
             input_array = np.ndarray([1,1],dtype='f8')
             if self.transform is not None:
@@ -120,9 +96,13 @@ class TFModel(object):
             else:
                 input_array[0][0] = input_value
             self.last_input_value = input_value
-            self.last_output_value = self.tf_model.predict(input_array)
-            self.last_output_gradient = self.sess.run(self.grads, {self.inputs:input_array})
-            #(self.last_output_value, self.last_output_gradient) = f_and_df(net=self.tf_model, v=input_array)
+            xt = tf.constant(input_array)
+            with tf.GradientTape() as tape:
+                tape.watch(xt)
+                y = self.tf_model(xt, training=False)
+            g = tape.gradient(y, xt)
+            self.last_output_value = np.asarray(y)          # output_array[0][0] -> scalar
+            self.last_output_gradient = [np.asarray(g)]     # gradient_obj[0][0][0] -> scalar
         return (self.last_output_value, self.last_output_gradient)
 
     def predict(self, input_value):
@@ -133,9 +113,7 @@ class TFModel(object):
             return output_array[0][0]
 
     def gradient(self, input_value, output_comp=0):
-        #return 0
         (prediction, out) = self.eval_if_needed(input_value)
-        #out_val = self.transform.invertOutput(prediction[0][0], input_value)
         if self.transform is not None:
             deriv = self.transform.derivativeOfRawOutputWithRespectToRawInput(self.last_input_value, prediction[0][0], out[0][0][0], self.last_input_value)
         else:

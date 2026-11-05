@@ -363,6 +363,35 @@ bool GenCouplingSimulator::setJacStamp(const std::string & deviceName,
 }
 
 //-----------------------------------------------------------------------------
+// Function      : GenCouplingSimulator::setErrorWeightMask
+// Purpose       : Set the weighting mask for time integrator error
+// Special Notes :
+// Scope         : public
+// Creator       : Paul Kuberry, SNL, Computational and Applied Math
+// Creation Date : 8/16/2026
+//-----------------------------------------------------------------------------
+///
+/// Given the name of a GeneralExternal device, copy the given
+/// error weight mask into the object. 
+///
+/// @param[in] deviceName   The name of the device as set in the netlist
+/// @param[in] wM Reference to a error weight mask vector for internal solution
+///            variables
+/// @return  True if device found, false if not
+
+bool GenCouplingSimulator::setErrorWeightMask(const std::string & deviceName,
+                                              std::vector<double> &wM)
+{
+  bool success=true;
+  Xyce::Device::GeneralExternal::Instance * genExtPtr = getGeneralExternalDeviceInstance_(deviceName);
+  if (genExtPtr)
+    genExtPtr -> setErrorWeightMask(wM);
+  else
+    success=false;
+  return success;
+}
+
+//-----------------------------------------------------------------------------
 // Function      : GenCouplingSimulator::setVectorLoader
 // Purpose       : Associate a vector loader object with named device
 // Special Notes :
